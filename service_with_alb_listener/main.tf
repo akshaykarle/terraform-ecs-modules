@@ -7,15 +7,14 @@ variable "iam_role_arn" {}
 variable "route53_name" {}
 variable "route53_zone_id" {}
 variable "name" {}
-variable "ports" { type = "list" }
+variable "port" {}
 variable "health_check_path" { default = "/" }
 variable "task_definition" {}
 
 resource "aws_alb_target_group" "default" {
-  count = "${length(var.ports)}"
-  name       = "${var.name}-${terraform.workspace}-${element(var.ports, count.index)}"
+  name       = "${var.name}-${terraform.workspace}"
   tags { env = "${terraform.workspace}" }
-  port       = "${element(var.ports, count.index)}"
+  port       = "${var.port}"
   protocol   = "HTTP"
   vpc_id     = "${var.vpc_id}"
 
@@ -25,13 +24,12 @@ resource "aws_alb_target_group" "default" {
 }
 
 resource "aws_alb_listener" "default" {
-  count = "${length(var.ports)}"
   load_balancer_arn = "${var.alb_arn}"
-  port       = "${element(var.ports, count.index)}"
+  port       = "${var.port}"
   protocol          = "HTTP"
 
   default_action {
-    target_group_arn = "${element(aws_alb_target_group.default.*.id, count.index)}"
+    target_group_arn = "${aws_alb_target_group.default.id}"
     type             = "forward"
   }
 }
@@ -57,8 +55,10 @@ resource "aws_ecs_service" "service" {
   desired_count   = 1
 
   load_balancer {
-    target_group_arn = "${aws_alb_target_group.default.0.arn}"
+    target_group_arn = "${aws_alb_target_group.default.arn}"
     container_name   = "${var.name}"
-    container_port = "${element(var.ports, 0)}"
+    container_port = "${var.port}"
   }
 }
+
+output "service_dns_record" { value = "${aws_route53_record.default.name}" }
